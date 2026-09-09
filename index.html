@@ -703,6 +703,84 @@
       margin-bottom: 6px;
     }
 
+
+    /* ---- INSTALL / ADD TO HOME SCREEN VIEW ---- */
+    #view-install {
+      padding: 40px 24px 30px;
+      overflow-y: auto;
+      background: var(--bg);
+    }
+    .install-wrap {
+      max-width: 400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    .install-icon-preview {
+      border-radius: 22px;
+      box-shadow: 0 12px 40px rgba(0, 232, 122, 0.18);
+    }
+    .install-title {
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--text);
+      text-align: center;
+      letter-spacing: -0.5px;
+      margin-top: 4px;
+    }
+    .install-subtitle {
+      font-size: 15px;
+      color: var(--dim);
+      text-align: center;
+      line-height: 1.55;
+      margin-bottom: 6px;
+    }
+    .install-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    .install-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .install-num {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #000;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+    .install-text { flex: 1; }
+    .install-share-icon {
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+    .install-actions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      margin-top: 10px;
+    }
+
   </style>
 </head>
 <body>
@@ -789,6 +867,57 @@
   <!-- ==========================================
        SETUP
        ========================================== -->
+  <div id="view-install" class="view">
+    <div class="install-wrap">
+      <img src="icon-192.png" class="install-icon-preview" width="88" height="88" alt="FRZO">
+      <h1 class="install-title">One more step</h1>
+      <p class="install-subtitle">Add FRZO to your home screen — one tap to open, no browser needed.</p>
+
+      <div class="install-steps" id="install-ios" hidden>
+        <div class="install-step">
+          <span class="install-num">1</span>
+          <span class="install-text">Tap the <b>Share</b> button in Safari</span>
+          <svg class="install-share-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/>
+            <polyline points="16 6 12 2 8 6"/>
+            <line x1="12" y1="2" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="install-step">
+          <span class="install-num">2</span>
+          <span class="install-text">Scroll and tap <b>Add to Home Screen</b></span>
+        </div>
+        <div class="install-step">
+          <span class="install-num">3</span>
+          <span class="install-text">Tap <b>Add</b> in the top-right corner</span>
+        </div>
+      </div>
+
+      <div class="install-steps" id="install-android" hidden>
+        <button id="install-native-btn" class="btn btn-primary btn-full" onclick="triggerNativeInstall()" hidden style="margin-bottom:12px;">
+          📲 Install FRZO
+        </button>
+        <div class="install-step">
+          <span class="install-num">1</span>
+          <span class="install-text">Tap the <b>menu</b> (⋮) in Chrome</span>
+        </div>
+        <div class="install-step">
+          <span class="install-num">2</span>
+          <span class="install-text">Tap <b>Install app</b> or <b>Add to Home Screen</b></span>
+        </div>
+      </div>
+
+      <div class="install-actions">
+        <button class="btn btn-primary btn-full" onclick="finishInstallStep()">
+          I've added it — continue →
+        </button>
+        <button class="btn btn-ghost" onclick="skipInstallStep()" style="margin-top:6px;">
+          Skip for now
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="view-setup" class="view">
     <div class="setup-inner">
       <div class="setup-hero">
@@ -842,7 +971,8 @@
         </button>
         <p class="setup-note">
           Receipts save to <strong>FRZO/receipts.csv</strong> in your own Drive.<br>
-          FRZO never sees your data. Your Drive, your file.
+          FRZO never sees your data. Your Drive, your file.<br>
+          <span style="color:var(--warning);">⚠️ Don't rename the folder or file — FRZO finds them by name.</span>
         </p>
       </div>
 
@@ -1058,6 +1188,17 @@
       <div class="settings-body">
 
         <div class="settings-group">
+          <div class="section-label">Home screen</div>
+          <div class="status-row" style="margin-bottom:10px;">
+            <div class="dot" id="s-install-dot"></div>
+            <span id="s-install-msg">Not on home screen yet</span>
+          </div>
+          <button class="btn btn-secondary btn-full" id="btn-install-cta" onclick="go('install')">
+            Add to Home Screen
+          </button>
+        </div>
+
+        <div class="settings-group">
           <div class="section-label">Claude AI</div>
           <div class="field">
             <label>API Key</label>
@@ -1073,6 +1214,9 @@
             <span id="s-drive-msg">Not connected</span>
           </div>
           <button class="btn btn-secondary btn-full" id="btn-reconnect">Reconnect Google Drive</button>
+          <p class="setup-note" style="margin-top:10px;">
+            ⚠️ <b>Do not rename or move</b> the <b>FRZO</b> folder or the <b>receipts.csv</b> file — the app finds them by name in your Drive.
+          </p>
         </div>
 
         <div class="settings-group">
@@ -1136,7 +1280,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.3.1';
+const VERSION = '0.3.2';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
@@ -1155,11 +1299,18 @@ const S = {
 //  ROUTING
 // ─────────────────────────────────────────────────────────────
 function go(view) {
+  // Install-prompt intercept: routing to home goes to install first
+  // for anyone who hasn't added FRZO to their home screen.
+  if (view === 'home' && typeof shouldShowInstallStep === 'function' && shouldShowInstallStep()) {
+    view = 'install';
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + view).classList.add('active');
   if (view === 'dashboard') renderDash();
   if (view === 'home')      renderRecent();
   if (view === 'scanning') showScannerTipIfNeeded();
+  if (view === 'install')  showInstallView();
+  if (view === 'settings') updateSettingsInstallStatus();
   // update bottom nav active state
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.getAttribute('onclick')?.includes(`'${view}'`));
@@ -1207,6 +1358,90 @@ function devUpdate() {
 
 function devJump(view) {
   go(view);
+}
+
+// -----------------------------------------------------------
+//  ADD TO HOME SCREEN (install prompt flow)
+//  Every tester lands here after Drive connects. iOS gets
+//  manual steps (Safari won't fire an install prompt);
+//  Android Chrome gets a native install button via the
+//  beforeinstallprompt event.
+// -----------------------------------------------------------
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('install-native-btn');
+  if (btn) btn.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  localStorage.setItem('frzo_installed', '1');
+  localStorage.setItem('frzo_install_seen', '1');
+});
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+
+function detectPlatform() {
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'other';
+}
+
+function shouldShowInstallStep() {
+  if (isStandalone()) return false;
+  if (typeof isDesktop === 'function' && isDesktop()) return false;
+  if (localStorage.getItem('frzo_install_seen') === '1') return false;
+  return true;
+}
+
+function showInstallView() {
+  const platform = detectPlatform();
+  const ios     = document.getElementById('install-ios');
+  const android = document.getElementById('install-android');
+  if (ios)     ios.hidden     = (platform !== 'ios');
+  if (android) android.hidden = (platform === 'ios');
+  const nativeBtn = document.getElementById('install-native-btn');
+  if (nativeBtn) nativeBtn.hidden = !deferredInstallPrompt;
+}
+
+async function triggerNativeInstall() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const result = await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  if (result.outcome === 'accepted') {
+    finishInstallStep();
+  }
+}
+
+function finishInstallStep() {
+  localStorage.setItem('frzo_install_seen', '1');
+  go('home');
+}
+
+function skipInstallStep() {
+  localStorage.setItem('frzo_install_seen', '1');
+  go('home');
+}
+
+function updateSettingsInstallStatus() {
+  const dot = document.getElementById('s-install-dot');
+  const msg = document.getElementById('s-install-msg');
+  const btn = document.getElementById('btn-install-cta');
+  if (!msg) return;
+  if (isStandalone()) {
+    if (dot) dot.classList.add('green');
+    msg.textContent = 'Installed to home screen';
+    if (btn) btn.hidden = true;
+  } else {
+    if (dot) dot.classList.remove('green');
+    msg.textContent = 'Not on home screen yet';
+    if (btn) btn.hidden = false;
+  }
 }
 
 function init() {
