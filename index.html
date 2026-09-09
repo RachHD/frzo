@@ -84,7 +84,7 @@
     .logo {
       font-size: 28px; font-weight: 900; letter-spacing: -0.5px;
     }
-    .logo .dot { color: var(--accent); }
+    .logo .dot { color: var(--accent); background: none; width: auto; height: auto; border-radius: 0; display: inline; flex-shrink: initial; }
 
     /* ---- BUTTONS ---- */
     .btn {
@@ -358,6 +358,29 @@
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; transition: all .2s;
       -webkit-tap-highlight-color: transparent;
+      position: relative;
+    }
+    /* Orbiting green dot signals the circle is tappable */
+    .scan-circle::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      margin: -6px 0 0 -6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 14px rgba(0, 232, 122, 0.65);
+      animation: scan-orbit 4s linear infinite;
+      pointer-events: none;
+    }
+    .scan-circle:active::before {
+      animation-play-state: paused;
+    }
+    @keyframes scan-orbit {
+      from { transform: rotate(0deg)   translate(92px); }
+      to   { transform: rotate(360deg) translate(92px); }
     }
     .scan-circle:active {
       transform: scale(.94);
@@ -750,7 +773,7 @@
     <div class="beta-wrap">
       <div class="beta-top">
         <div class="logo" style="font-size:38px;letter-spacing:8px;">FRZO<span class="dot">.</span></div>
-        <p class="beta-invited">You've been invited to try FRZO</p>
+        <p class="beta-invited">FRZO is inviting you to test its latest micro-app: Receipt Tracker.</p>
         <p class="beta-tagline">Zero-friction receipt tracking.</p>
         <p class="beta-desc">Snap a receipt — AI pulls the data —<br>it saves to your own Google Drive.</p>
       </div>
@@ -770,11 +793,11 @@
     <div class="setup-inner">
       <div class="setup-hero">
         <div class="logo">FRZO<span class="dot">.</span></div>
-        <p>Friction Zero receipt tracker</p>
+        <p>Receipt Tracker</p>
       </div>
 
       <!-- Step 1: AI provider + key -->
-      <div class="setup-step">
+      <div class="setup-step" hidden>
         <div class="section-label">1 — AI Provider (reads your receipts)</div>
 
         <!-- Provider toggle -->
@@ -808,7 +831,7 @@
 
       <!-- Step 2: Google Drive -->
       <div class="setup-step">
-        <div class="section-label">2 — Google Drive (stores your data)</div>
+        <div class="section-label">Google Drive (stores your data)</div>
         <div class="status-row" id="drive-status">
           <div class="dot" id="drive-dot"></div>
           <span id="drive-msg">Connect so receipts survive cache clears</span>
@@ -1063,6 +1086,17 @@
           </button>
         </div>
 
+        <div class="settings-group">
+          <div class="section-label">Beta invites</div>
+          <div class="share-row">
+            <button class="share-btn" onclick="showKeyQR()">📱 QR — in person</button>
+            <button class="share-btn" onclick="copyShareLink()">🧪 Beta invite</button>
+          </div>
+          <p class="setup-note" style="margin-top:10px;">
+            <b>Beta invite</b> copies a shareable URL to your clipboard — text it to a tester and they land straight in the app.
+          </p>
+        </div>
+
         <div class="frzo-foot">
           <div class="logo">FRZO<span class="dot">.</span></div>
           <p>Friction Zero World</p>
@@ -1102,7 +1136,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
@@ -1326,7 +1360,7 @@ function openSettings() {
   $('s-key').value = S.apiKey ? '••••' + S.apiKey.slice(-6) : '';
   $('s-drive-dot').className = 'dot' + (S.driveToken ? ' green' : '');
   $('s-drive-msg').textContent = S.driveToken
-    ? 'Connected — saving to FRZO/receipts.csv'
+    ? 'Connected · In your Drive: FRZO/receipts.csv'
     : (S.localMode ? 'Local-only mode' : 'Not connected');
   go('settings');
 }
