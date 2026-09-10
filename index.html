@@ -781,6 +781,42 @@
       margin-top: 10px;
     }
 
+
+    /* ---- BETA PAUSED VIEW ---- */
+    #view-paused {
+      padding: 60px 24px;
+      overflow-y: auto;
+      background: var(--bg);
+    }
+    .paused-wrap {
+      max-width: 420px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      text-align: center;
+    }
+    .paused-title {
+      font-size: 30px;
+      font-weight: 900;
+      color: var(--text);
+      margin-top: 20px;
+    }
+    .paused-msg {
+      color: var(--dim);
+      font-size: 16px;
+      line-height: 1.55;
+    }
+    .paused-fine {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    /* Edit affordance on receipt rows */
+    .receipt-row { transition: background 0.15s; }
+    .receipt-row:active { background: var(--surface2); }
+
   </style>
 </head>
 <body>
@@ -859,6 +895,9 @@
         <button class="btn btn-primary btn-full" style="font-size:17px;padding:16px;" onclick="betaJoin()">
           Connect Google Drive →
         </button>
+        <button class="btn btn-secondary btn-full" onclick="showInstallFromWelcome()" style="margin-top:8px;">
+          📲 Save Receipt Tracker to Home Screen
+        </button>
         <p class="beta-fine">Your data stays in your Drive. FRZO never sees it.</p>
       </div>
     </div>
@@ -867,6 +906,15 @@
   <!-- ==========================================
        SETUP
        ========================================== -->
+  <div id="view-paused" class="view">
+    <div class="paused-wrap">
+      <div class="logo" style="font-size:38px;letter-spacing:8px;">FRZO<span class="dot">.</span></div>
+      <h1 class="paused-title">Beta paused</h1>
+      <p class="paused-msg" id="paused-msg">Receipt Tracker is temporarily paused. Please check back later.</p>
+      <p class="paused-fine">Your receipts are safe in your own Google Drive.</p>
+    </div>
+  </div>
+
   <div id="view-install" class="view">
     <div class="install-wrap">
       <img src="icon-192.png" class="install-icon-preview" width="88" height="88" alt="FRZO">
@@ -972,7 +1020,7 @@
         <p class="setup-note">
           Receipts save to <strong>FRZO/receipts.csv</strong> in your own Drive.<br>
           FRZO never sees your data. Your Drive, your file.<br>
-          <span style="color:var(--warning);">⚠️ Your phone — not FRZO — locates this folder by searching for the name. Rename it and the app can't find it next visit.</span>
+          <span style="color:var(--warning);">⚠️ Receipt Tracker searches your Google Drive for a folder called FRZO. Do not rename it or the receipts.csv. The app connection will break.</span>
         </p>
       </div>
 
@@ -1215,7 +1263,7 @@
           </div>
           <button class="btn btn-secondary btn-full" id="btn-reconnect">Reconnect Google Drive</button>
           <p class="setup-note" style="margin-top:10px;">
-            Your phone — not FRZO — locates this folder by searching for the name <b>FRZO</b> in your Drive. Rename it and the app on your device can't find it next visit.
+            Receipt Tracker searches your Google Drive for a folder called <b>FRZO</b>. Do not rename it or the <b>receipts.csv</b>. The app connection will break.
           </p>
         </div>
 
@@ -1270,6 +1318,7 @@ const GOOGLE_CLIENT_ID = '643074678664-t44jjfjt3k13atrmli70l7b9h8h0v5h5.apps.goo
 const DRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME      = 'FRZO';
 const CSV_FILE         = 'receipts.csv';
+const CSV_HEADER_NOTE  = '# Have edits to make? Do it in the app and they will instantly appear here. Editing in Sheets is currently unavailable in Beta.\n';
 const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,status,created_at\n';
 
 // ─────────────────────────────────────────────────────────────
@@ -1280,7 +1329,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.3.3';
+const VERSION = '0.4.0';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
@@ -1293,6 +1342,8 @@ const S = {
   current:     null,        // receipt being reviewed
   dashFilter:  'all',
   fromInvite:  false,       // true when key arrived via beta invite link
+  editingId:   null,        // set when editing an existing receipt
+  installFromWelcome: false,// true when install view opened from beta welcome
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1308,7 +1359,12 @@ function go(view) {
   document.getElementById('view-' + view).classList.add('active');
   if (view === 'dashboard') renderDash();
   if (view === 'home')      renderRecent();
-  if (view === 'scanning') showScannerTipIfNeeded();
+  if (view === 'scanning') {
+    S.editingId = null;
+    const _sb = document.getElementById('btn-save-review');
+    if (_sb) _sb.textContent = 'Save';
+    showScannerTipIfNeeded();
+  }
   if (view === 'install')  showInstallView();
   if (view === 'settings') updateSettingsInstallStatus();
   if (view === 'setup')    updateSetupDriveBtn();
@@ -1421,11 +1477,21 @@ async function triggerNativeInstall() {
 
 function finishInstallStep() {
   localStorage.setItem('frzo_install_seen', '1');
+  if (S.installFromWelcome) {
+    S.installFromWelcome = false;
+    go('beta');
+    return;
+  }
   go('home');
 }
 
 function skipInstallStep() {
   localStorage.setItem('frzo_install_seen', '1');
+  if (S.installFromWelcome) {
+    S.installFromWelcome = false;
+    go('beta');
+    return;
+  }
   go('home');
 }
 
@@ -1466,7 +1532,72 @@ function updateSetupDriveBtn() {
   if (btn) btn.hidden = !!S.driveToken;
 }
 
-function init() {
+// -----------------------------------------------------------
+//  ADMIN KILL SWITCH
+//  Fetches ./status.json on load. If enabled: false, shows the
+//  paused view. Fails open (assumes enabled) if fetch fails,
+//  so a network hiccup doesn't lock everyone out.
+// -----------------------------------------------------------
+async function checkBetaStatus() {
+  try {
+    const res = await fetch('./status.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return true;
+    const status = await res.json();
+    if (status.enabled === false) {
+      const msgEl = document.getElementById('paused-msg');
+      if (msgEl && status.message) msgEl.textContent = status.message;
+      go('paused');
+      return false;
+    }
+  } catch (e) {
+    // fail open
+  }
+  return true;
+}
+
+// -----------------------------------------------------------
+//  EDIT RECEIPT
+//  Opens the review view populated with an existing receipt.
+//  saveReceipt reads S.editingId to update in place.
+// -----------------------------------------------------------
+function editReceipt(id) {
+  if (!id) return;
+  const r = S.receipts.find(x => x.id === id);
+  if (!r) return;
+  S.editingId = id;
+  S.current = r;
+  const set = (el, v) => {
+    const e = document.getElementById(el);
+    if (e) e.value = v;
+  };
+  set('r-amount', r.amount || '');
+  set('r-merchant', r.merchant || '');
+  set('r-date', r.date || '');
+  set('r-tax', r.tax || '');
+  const taxDisp = document.getElementById('r-tax-display');
+  if (taxDisp) taxDisp.textContent = (parseFloat(r.tax) || 0).toFixed(2);
+  const reimb = document.getElementById('r-reimb');
+  if (reimb) reimb.checked = !!r.reimbursable;
+  const saveBtn = document.getElementById('btn-save-review');
+  if (saveBtn) saveBtn.textContent = 'Update';
+  go('review');
+}
+
+// -----------------------------------------------------------
+//  INSTALL FROM WELCOME
+//  Second-button entry point on beta welcome. Marks that we
+//  came from welcome so install completion returns to welcome
+//  instead of trying to open the home screen (which needs Drive).
+// -----------------------------------------------------------
+function showInstallFromWelcome() {
+  S.installFromWelcome = true;
+  go('install');
+}
+
+async function init() {
+  // Kill-switch check - if the beta is paused, show that instead
+  if (!(await checkBetaStatus())) return;
+
   // Service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js?v=' + VERSION).catch(() => {});
@@ -1521,7 +1652,12 @@ function wireEvents() {
   $('cam').addEventListener('change', onPhoto);
 
   // Review
-  $('btn-discard').addEventListener('click', () => go('home'));
+  $('btn-discard').addEventListener('click', () => {
+    S.editingId = null;
+    const _btn = document.getElementById('btn-save-review');
+    if (_btn) _btn.textContent = 'Save';
+    go('home');
+  });
   $('btn-save-review').addEventListener('click', saveReceipt);
   $('r-tax').addEventListener('input', e => {
     $('r-tax-display').textContent = fmt(e.target.value);
@@ -1885,7 +2021,11 @@ async function onPhoto(e) {
     go('review');
 
   } catch (err) {
-    toast('Scan error: ' + err.message, 'err');
+    if (!navigator.onLine) {
+      toast("You're offline — FRZO needs internet to read receipts. Save this receipt to rescan once you're connected to internet or data.", 'err');
+    } else {
+      toast('Scan error: ' + err.message, 'err');
+    }
     go('home');
   }
 }
@@ -2025,20 +2165,37 @@ function readReview() {
 // ─────────────────────────────────────────────────────────────
 async function saveReceipt() {
   const r = readReview();
-  S.receipts.unshift(r);
+  const wasEditing = !!S.editingId;
+
+  if (wasEditing) {
+    r.id = S.editingId;
+    const idx = S.receipts.findIndex(x => x.id === S.editingId);
+    if (idx >= 0) {
+      const orig = S.receipts[idx];
+      r.created_at = orig.created_at || new Date().toISOString();
+      S.receipts[idx] = r;
+    } else {
+      S.receipts.unshift(r);
+    }
+    S.editingId = null;
+  } else {
+    S.receipts.unshift(r);
+  }
+
+  // Reset save button label back to Save
+  const _saveBtn = document.getElementById('btn-save-review');
+  if (_saveBtn) _saveBtn.textContent = 'Save';
 
   // Persist
   try {
     if (S.driveToken) {
       await writeToDrive();
-      toast('Saved to Google Drive ✓', 'ok');
+      toast(wasEditing ? 'Updated ✓' : 'Saved to Google Drive ✓', 'ok');
     } else {
-      // Local fallback
       localStorage.setItem('frzo_receipts', JSON.stringify(S.receipts));
-      toast('Saved locally ✓', 'ok');
+      toast(wasEditing ? 'Updated locally ✓' : 'Saved locally ✓', 'ok');
     }
   } catch (err) {
-    // Drive failed — save locally as backup
     localStorage.setItem('frzo_receipts', JSON.stringify(S.receipts));
     toast('Drive sync failed — saved locally', 'err');
   }
@@ -2063,7 +2220,7 @@ function toCSV(rows) {
     r.status  || 'Pending',
     r.created_at || '',
   ].join(','));
-  return CSV_HEADER + lines.join('\n') + '\n';
+  return CSV_HEADER_NOTE + CSV_HEADER + lines.join('\n') + '\n';
 }
 
 function esc(v) {
@@ -2073,7 +2230,7 @@ function esc(v) {
 }
 
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
+  const lines = text.trim().split('\n').filter(l => !l.startsWith('#'));
   if (lines.length < 2) return [];
   const headers = lines[0].split(',').map(h => h.trim());
   return lines.slice(1).map(line => {
@@ -2137,7 +2294,7 @@ function renderList(rows, id) {
     return;
   }
   el.innerHTML = rows.map(r => `
-    <div class="receipt-row">
+    <div class="receipt-row" onclick="editReceipt('${r.id || ''}')" style="cursor:pointer;">
       <div class="receipt-icon">${emoji(r.merchant)}</div>
       <div class="receipt-info">
         <div class="receipt-merchant">${html(r.merchant)}</div>

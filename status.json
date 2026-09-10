@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "message": "Receipt Tracker is temporarily paused. Please check back soon.",
+  "notes": "Edit this file to control the beta. enabled:false pauses everyone. Push to GitHub, takes effect on next reload."
+}
