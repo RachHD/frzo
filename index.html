@@ -1278,7 +1278,7 @@
           </button>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" id="settings-invites-group" hidden>
           <div class="section-label">Beta invites</div>
           <div class="share-row">
             <button class="share-btn" onclick="showKeyQR()">📱 QR — in person</button>
@@ -1329,7 +1329,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
@@ -1366,7 +1366,7 @@ function go(view) {
     showScannerTipIfNeeded();
   }
   if (view === 'install')  showInstallView();
-  if (view === 'settings') updateSettingsInstallStatus();
+  if (view === 'settings') { updateSettingsInstallStatus(); updateAdminUI(); }
   if (view === 'setup')    updateSetupDriveBtn();
   // update bottom nav active state
   document.querySelectorAll('.nav-btn').forEach(b => {
@@ -1435,6 +1435,14 @@ window.addEventListener('appinstalled', () => {
   localStorage.setItem('frzo_installed', '1');
   localStorage.setItem('frzo_install_seen', '1');
 });
+
+// -----------------------------------------------------------
+//  DESKTOP / VIEWPORT
+// -----------------------------------------------------------
+function isDesktop() {
+  return window.matchMedia('(min-width: 900px) and (min-height: 720px)').matches
+      && !('ontouchstart' in window);
+}
 
 function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches
@@ -1519,12 +1527,33 @@ function updateSettingsInstallStatus() {
 //  updateSetupDriveBtn hides the Connect button once Drive
 //  is already connected - cleaner setup for admin flow.
 // -----------------------------------------------------------
-function checkAdminMode() {
-  if (window.location.hash.toLowerCase().includes('admin')) {
+function checkAdminMode(hashOverride) {
+  const h = ((hashOverride != null ? hashOverride : window.location.hash) || '').toLowerCase();
+  if (h.includes('admin')) {
     document.querySelectorAll('.setup-step[hidden]').forEach(el => {
       el.hidden = false;
     });
+    localStorage.setItem('frzo_is_admin', '1');
   }
+}
+
+// Classify user for admin-gated UI. First-run migration friendly:
+// existing users with a key but no flag (pre-v0.4.1) become admin.
+function classifyUser() {
+  if (localStorage.getItem('frzo_is_admin')  === '1') return;
+  if (localStorage.getItem('frzo_is_tester') === '1') return;
+  if (S.fromInvite) {
+    localStorage.setItem('frzo_is_tester', '1');
+  } else if (S.apiKey) {
+    localStorage.setItem('frzo_is_admin', '1');
+  }
+}
+
+// Show/hide admin-only UI in Settings (invite generation).
+function updateAdminUI() {
+  const isAdmin = localStorage.getItem('frzo_is_admin') === '1';
+  const group = document.getElementById('settings-invites-group');
+  if (group) group.hidden = !isAdmin;
 }
 
 function updateSetupDriveBtn() {
@@ -1539,20 +1568,39 @@ function updateSetupDriveBtn() {
 //  so a network hiccup doesn't lock everyone out.
 // -----------------------------------------------------------
 async function checkBetaStatus() {
-  try {
-    const res = await fetch('./status.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return true;
-    const status = await res.json();
-    if (status.enabled === false) {
+  const applyStatus = (status) => {
+    if (status && status.enabled === false) {
       const msgEl = document.getElementById('paused-msg');
       if (msgEl && status.message) msgEl.textContent = status.message;
       go('paused');
       return false;
     }
+    return true;
+  };
+  const applyCached = () => {
+    try {
+      const cached = localStorage.getItem('frzo_status_cache');
+      if (!cached) return true; // never checked before — fail open
+      return applyStatus(JSON.parse(cached));
+    } catch { return true; }
+  };
+  try {
+    // Race the fetch against a 2s timeout so a slow endpoint can't stall boot
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch('./status.json?t=' + Date.now(), {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return applyCached();
+    const status = await res.json();
+    localStorage.setItem('frzo_status_cache', JSON.stringify(status));
+    return applyStatus(status);
   } catch (e) {
-    // fail open
+    // Offline / timeout / aborted — fall back to last-known status
+    return applyCached();
   }
-  return true;
 }
 
 // -----------------------------------------------------------
@@ -1574,6 +1622,8 @@ function editReceipt(id) {
   set('r-merchant', r.merchant || '');
   set('r-date', r.date || '');
   set('r-tax', r.tax || '');
+  set('r-payer', r.payer || 'Rachel');
+  set('r-method', r.method || 'credit');
   const taxDisp = document.getElementById('r-tax-display');
   if (taxDisp) taxDisp.textContent = (parseFloat(r.tax) || 0).toFixed(2);
   const reimb = document.getElementById('r-reimb');
@@ -1603,6 +1653,9 @@ async function init() {
     navigator.serviceWorker.register('sw.js?v=' + VERSION).catch(() => {});
   }
 
+  // Capture raw hash BEFORE any parse wipes it (needed by checkAdminMode)
+  const _rawHash = window.location.hash;
+
   // Check URL for a shared key — e.g. frzo.world#key=sk-ant-...
   const hashKey = (window.location.hash.match(/[#&]key=([^&]+)/) || [])[1];
   if (hashKey) {
@@ -1624,7 +1677,8 @@ async function init() {
 
   // Wire up all events
   wireEvents();
-  checkAdminMode();
+  classifyUser();
+  checkAdminMode(_rawHash);
 
   // Decide starting view
   if (S.fromInvite && !S.csvId && !S.localMode) {
@@ -1792,7 +1846,12 @@ function connectDrive() {
   tokenClient.requestAccessToken();
 }
 
-function tryAutoConnect() {
+async function tryAutoConnect() {
+  // Wait up to 3s for Google Identity Services to load (async defer race)
+  const start = Date.now();
+  while (!window.google?.accounts?.oauth2 && Date.now() - start < 3000) {
+    await new Promise(r => setTimeout(r, 100));
+  }
   // Try silent reconnect (will work if user recently authorized)
   if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID') || !window.google?.accounts?.oauth2) {
     // No Google creds configured — go home anyway if local mode or csvId exists
@@ -1942,16 +2001,49 @@ async function loadFromDrive() {
       `https://www.googleapis.com/drive/v3/files/${S.csvId}?alt=media`,
       { headers: { 'Authorization': 'Bearer ' + S.driveToken } }
     );
+    if (!res.ok) {
+      // 401 / 404 / 5xx: DO NOT zero out S.receipts (would cause next save to wipe Drive)
+      console.warn('loadFromDrive HTTP ' + res.status + ' — keeping existing state');
+      return;
+    }
     const text = await res.text();
-    S.receipts = parseCSV(text);
+    const remote = parseCSV(text);
+
+    // Merge unsynced local-fallback receipts (from a prior failed Drive write)
+    const localRaw = localStorage.getItem('frzo_receipts');
+    if (localRaw) {
+      try {
+        const local = JSON.parse(localRaw);
+        const remoteIds = new Set(remote.map(r => r.id));
+        const orphans = local.filter(r => r && r.id && !remoteIds.has(r.id));
+        if (orphans.length) {
+          S.receipts = [...orphans, ...remote];
+          try {
+            await writeToDrive();
+            localStorage.removeItem('frzo_receipts');
+          } catch (e) {
+            console.warn('Merged write to Drive failed; keeping local fallback for next attempt');
+          }
+          return;
+        }
+      } catch (e) { /* ignore parse errors */ }
+    }
+    S.receipts = remote;
+    localStorage.removeItem('frzo_receipts');
   } catch (e) {
     console.warn('Drive load failed', e);
+    // Keep existing S.receipts intact
   }
 }
 
 async function writeToDrive() {
   if (!S.driveToken) return;
   await initDriveFolder();
+  if (!S.folderId) {
+    // Refuse to write without a folder — otherwise the file lands in Drive root
+    // and we lose track of it, creating a duplicate CSV on next boot.
+    throw new Error('Drive folder not ready');
+  }
 
   const csv = toCSV(S.receipts);
   const boundary = 'frzo' + Date.now();
@@ -2230,6 +2322,7 @@ function esc(v) {
 }
 
 function parseCSV(text) {
+  text = text.replace(/\r/g, '');
   const lines = text.trim().split('\n').filter(l => !l.startsWith('#'));
   if (lines.length < 2) return [];
   const headers = lines[0].split(',').map(h => h.trim());
@@ -2321,8 +2414,15 @@ function exportCSV() {
 }
 
 function clearCache() {
-  if (!confirm('Clear local app cache? Your Google Drive data stays safe.')) return;
+  if (!confirm('Clear the app cache? Your API key and Drive data stay put.')) return;
+  // Preserve identity so testers/admins don't get locked out
+  const preserved = {
+    frzo_key:       localStorage.getItem('frzo_key'),
+    frzo_is_admin:  localStorage.getItem('frzo_is_admin'),
+    frzo_is_tester: localStorage.getItem('frzo_is_tester'),
+  };
   localStorage.clear();
+  Object.entries(preserved).forEach(([k, v]) => { if (v !== null) localStorage.setItem(k, v); });
   toast('Cache cleared — reloading', 'ok');
   setTimeout(() => location.reload(), 1200);
 }
