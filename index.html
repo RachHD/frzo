@@ -1354,7 +1354,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.4.2';
+const VERSION = '0.4.3';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
@@ -1363,7 +1363,7 @@ const S = {
   folderId:    localStorage.getItem('frzo_folder')    || null,
   csvId:       localStorage.getItem('frzo_csv')       || null,
   localMode:   localStorage.getItem('frzo_local')     === '1',
-  receipts:    [],          // loaded from Drive or localStorage
+  receipts:    (() => { try { return JSON.parse(localStorage.getItem('frzo_receipts_cache') || '[]'); } catch { return []; } })(),  // restored from last successful Drive load or save
   current:     null,        // receipt being reviewed
   dashFilter:  'all',
   fromInvite:  false,       // true when key arrived via beta invite link
@@ -1709,7 +1709,11 @@ async function init() {
   if (S.fromInvite && !S.csvId && !S.localMode) {
     go('beta'); // fresh beta invite — show welcome screen
   } else if (S.apiKey && (S.driveToken || S.localMode || S.csvId)) {
-    tryAutoConnect(); // returning user — silent reconnect
+    // Returning user: skip proactive OAuth on boot. PWA context loses
+    // Google session between launches, so tryAutoConnect() shows the
+    // reconnect UI every single time. Home loads instantly with cached
+    // receipts; Drive reconnect happens on demand from Settings.
+    go('home');
   } else {
     go('setup');
   }
@@ -2043,6 +2047,7 @@ async function loadFromDrive() {
         const orphans = local.filter(r => r && r.id && !remoteIds.has(r.id));
         if (orphans.length) {
           S.receipts = [...orphans, ...remote];
+          localStorage.setItem('frzo_receipts_cache', JSON.stringify(S.receipts));
           try {
             await writeToDrive();
             localStorage.removeItem('frzo_receipts');
@@ -2054,6 +2059,7 @@ async function loadFromDrive() {
       } catch (e) { /* ignore parse errors */ }
     }
     S.receipts = remote;
+    localStorage.setItem('frzo_receipts_cache', JSON.stringify(remote));
     localStorage.removeItem('frzo_receipts');
   } catch (e) {
     console.warn('Drive load failed', e);
@@ -2307,9 +2313,11 @@ async function saveReceipt() {
   try {
     if (S.driveToken) {
       await writeToDrive();
+      localStorage.setItem('frzo_receipts_cache', JSON.stringify(S.receipts));
       toast(wasEditing ? 'Updated ✓' : 'Saved to Google Drive ✓', 'ok');
     } else {
       localStorage.setItem('frzo_receipts', JSON.stringify(S.receipts));
+      localStorage.setItem('frzo_receipts_cache', JSON.stringify(S.receipts));
       toast(wasEditing ? 'Updated locally ✓' : 'Saved locally ✓', 'ok');
     }
   } catch (err) {
