@@ -743,6 +743,28 @@
       gap: 10px;
       width: 100%;
     }
+    /* Respect the hidden attribute — otherwise display:flex above wins
+       and both iOS + Android sections render at once. */
+    .install-steps[hidden] { display: none !important; }
+    .install-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+      align-self: stretch;
+      text-align: left;
+    }
+    .install-note {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 8px;
+      line-height: 1.45;
+    }
     .install-step {
       display: flex;
       align-items: center;
@@ -922,6 +944,7 @@
       <p class="install-subtitle">Add FRZO to your home screen — one tap to open, no browser needed.</p>
 
       <div class="install-steps" id="install-ios" hidden>
+        <div class="install-section-title">iPhone · Safari</div>
         <div class="install-step">
           <span class="install-num">1</span>
           <span class="install-text">Tap the <b>Share</b> button in Safari</span>
@@ -942,6 +965,7 @@
       </div>
 
       <div class="install-steps" id="install-android" hidden>
+        <div class="install-section-title">Android · Chrome</div>
         <button id="install-native-btn" class="btn btn-primary btn-full" onclick="triggerNativeInstall()" hidden style="margin-bottom:12px;">
           📲 Install FRZO
         </button>
@@ -951,8 +975,9 @@
         </div>
         <div class="install-step">
           <span class="install-num">2</span>
-          <span class="install-text">Tap <b>Install app</b> or <b>Add to Home Screen</b></span>
+          <span class="install-text">Tap <b>Install and create shortcut</b> (or <b>Install app</b> on older Chrome), then tap <b>Install</b> — not <b>Create shortcut</b>.</span>
         </div>
+        <p class="install-note">Doesn't work? Make sure you're not in Private / Incognito mode — install is blocked there.</p>
       </div>
 
       <div class="install-actions">
@@ -1329,7 +1354,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.4.1';
+const VERSION = '0.4.2';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
