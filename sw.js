@@ -1,8 +1,8 @@
-// FRZO Service Worker
-// Cache is tied to VERSION passed via ?v= on registration.
-// index.html bumps VERSION -> new SW URL -> new cache -> old
-// cache deleted -> users get fresh build. Receipt scanning
-// still needs internet (Claude API + Drive).
+// FRZO Service Worker (v0.3.3+: network-first for HTML)
+// index.html is fetched from network on every visit so app
+// updates arrive on the first reload. Icons and manifest stay
+// cache-first since they change rarely. Falls back to cache
+// when offline. Receipt scanning still needs internet.
 
 const url = new URL(self.location.href);
 const VERSION = url.searchParams.get('v') || 'dev';
@@ -32,6 +32,27 @@ self.addEventListener('fetch', e => {
                 u.hostname.includes('google');
   if (isApi) return;
 
+  // Network-first for HTML navigations: updates land on first reload
+  const isDoc = e.request.mode === 'navigate'
+             || e.request.destination === 'document'
+             || u.pathname.endsWith('/')
+             || u.pathname.endsWith('/index.html');
+  if (isDoc) {
+    e.respondWith(
+      fetch(e.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+          return response;
+        })
+        .catch(() =>
+          caches.match(e.request).then(cached => cached || caches.match('./index.html'))
+        )
+    );
+    return;
+  }
+
+  // Cache-first for everything else (icons, manifest, static assets)
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -41,10 +62,6 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return response;
-      }).catch(() => {
-        if (e.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
       });
     })
   );

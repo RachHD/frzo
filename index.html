@@ -972,7 +972,7 @@
         <p class="setup-note">
           Receipts save to <strong>FRZO/receipts.csv</strong> in your own Drive.<br>
           FRZO never sees your data. Your Drive, your file.<br>
-          <span style="color:var(--warning);">⚠️ Don't rename the folder or file — FRZO finds them by name.</span>
+          <span style="color:var(--warning);">⚠️ Your phone — not FRZO — locates this folder by searching for the name. Rename it and the app can't find it next visit.</span>
         </p>
       </div>
 
@@ -1215,7 +1215,7 @@
           </div>
           <button class="btn btn-secondary btn-full" id="btn-reconnect">Reconnect Google Drive</button>
           <p class="setup-note" style="margin-top:10px;">
-            ⚠️ <b>Do not rename or move</b> the <b>FRZO</b> folder or the <b>receipts.csv</b> file — the app finds them by name in your Drive.
+            Your phone — not FRZO — locates this folder by searching for the name <b>FRZO</b> in your Drive. Rename it and the app on your device can't find it next visit.
           </p>
         </div>
 
@@ -1280,7 +1280,7 @@ const CSV_HEADER       = 'id,date,merchant,amount,tax,payer,reimbursable,method,
 //  Tied to the service worker cache: bumping invalidates the
 //  old cache and delivers new code to users on next load.
 // -----------------------------------------------------------
-const VERSION = '0.3.2';
+const VERSION = '0.3.3';
 
 const S = {
   apiKey:      localStorage.getItem('frzo_key')       || '',
@@ -1311,6 +1311,7 @@ function go(view) {
   if (view === 'scanning') showScannerTipIfNeeded();
   if (view === 'install')  showInstallView();
   if (view === 'settings') updateSettingsInstallStatus();
+  if (view === 'setup')    updateSetupDriveBtn();
   // update bottom nav active state
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.getAttribute('onclick')?.includes(`'${view}'`));
@@ -1444,6 +1445,27 @@ function updateSettingsInstallStatus() {
   }
 }
 
+// -----------------------------------------------------------
+//  ADMIN + SETUP HELPERS
+//  Admin bypass: rachhd.github.io/frzo/#admin unhides the
+//  hidden AI-provider step so Rachel (or another admin) can
+//  paste an API key directly on a fresh device.
+//  updateSetupDriveBtn hides the Connect button once Drive
+//  is already connected - cleaner setup for admin flow.
+// -----------------------------------------------------------
+function checkAdminMode() {
+  if (window.location.hash.toLowerCase().includes('admin')) {
+    document.querySelectorAll('.setup-step[hidden]').forEach(el => {
+      el.hidden = false;
+    });
+  }
+}
+
+function updateSetupDriveBtn() {
+  const btn = document.getElementById('btn-drive');
+  if (btn) btn.hidden = !!S.driveToken;
+}
+
 function init() {
   // Service worker
   if ('serviceWorker' in navigator) {
@@ -1471,6 +1493,7 @@ function init() {
 
   // Wire up all events
   wireEvents();
+  checkAdminMode();
 
   // Decide starting view
   if (S.fromInvite && !S.csvId && !S.localMode) {
